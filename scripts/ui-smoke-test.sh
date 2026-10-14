@@ -46,8 +46,13 @@ find_attr() {
 # Prints the centre "x y" of the last node whose text is exactly $1.
 find_text() { find_attr text "$1"; }
 
-# Succeeds if some node's text contains $1.
-has_text() { dump_ui | grep -F "text=\"" | grep -qF "$1"; }
+# Succeeds if some node's text contains $1. Counts instead of using grep -q, which exits at the
+# first match and would fail the pipeline (SIGPIPE) under pipefail.
+has_text() {
+  local n
+  n=$(dump_ui | grep -F 'text="' | grep -cF "$1") || true
+  [ "${n:-0}" -gt 0 ]
+}
 
 # Waits until the launcher has drawn its UI and has input focus; the first start can take a
 # while.
@@ -190,7 +195,7 @@ tap_text "Add"
 shot 11-widget-picker
 # First entry below the picker title.
 first_widget=$(dump_ui | grep -F 'text="' | sed -nE 's/.*text="([^"]+)".*/\1/p' |
-  grep -A1 -x 'Choose widget' | tail -1)
+  grep -A1 -x 'Choose widget' | tail -1) || true
 if [ -n "$first_widget" ] && [ "$first_widget" != "Choose widget" ] && [ "$first_widget" != "No widgets installed" ]; then
   echo "Adding widget: $first_widget"
   tap_text "$first_widget"
@@ -199,7 +204,7 @@ if [ -n "$first_widget" ] && [ "$first_widget" != "Choose widget" ] && [ "$first
   # generic; going home instead cancels it, which must not crash either.
   home
   shot 12-home-widget
-  p=$(find_attr content-desc "Home widget")
+  p=$(find_attr content-desc "Home widget") || true
   if [ -n "$p" ]; then
     set -- $p
     adb shell input swipe "$1" "$2" "$1" "$2" 1200
