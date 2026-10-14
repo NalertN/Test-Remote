@@ -134,6 +134,9 @@ if [ "$events_added" -eq 1 ]; then
 fi
 
 swipe_right
+# The very first gesture after a cold start can be lost while the app is still loading its
+# gesture code (seen on the slower API 37 image); a second try must then work.
+drawer_open || { echo "First swipe right did not open the app list, retrying once"; swipe_right; }
 shot 02-app-list
 drawer_open || { echo "Swipe right did not open the app list"; exit 1; }
 
