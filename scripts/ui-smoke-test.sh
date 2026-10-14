@@ -32,6 +32,20 @@ find_text() {
     awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }'
 }
 
+# Waits until the launcher has drawn its UI; the first start can take a while.
+wait_for_launcher() {
+  local i
+  for i in $(seq 1 30); do
+    if adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 &&
+      adb exec-out cat /sdcard/ui.xml | grep "package=\"$PKG\"" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Launcher did not appear"
+  return 1
+}
+
 tap_text() {
   local p; p=$(find_text "$1")
   [ -n "$p" ] || { echo "Not found: $1"; return 1; }
@@ -58,7 +72,7 @@ adb shell dumpsys battery set level 78
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard || true
 home
-sleep 3
+wait_for_launcher
 shot 01-home-empty
 
 swipe_up
