@@ -1,26 +1,40 @@
 package de.lennart.minilauncher
 
 import android.app.Application
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import de.lennart.minilauncher.data.AgendaDay
+import de.lennart.minilauncher.data.AgendaEvent
 import de.lennart.minilauncher.data.AppEntry
+import de.lennart.minilauncher.data.CalendarRepository
 import de.lennart.minilauncher.data.LauncherSettings
 import de.lennart.minilauncher.data.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.Collator
 
-enum class Screen { Home, Drawer, Settings }
+enum class Screen { Home, Drawer, Agenda, Settings }
+
+/** An installable widget, labelled for the picker. */
+data class WidgetOption(val info: AppWidgetProviderInfo, val appLabel: String, val label: String)
 
 data class LauncherState(
     val favorites: List<AppEntry> = emptyList(),
@@ -28,12 +42,16 @@ data class LauncherState(
     val apps: List<AppEntry> = emptyList(),
     val hiddenApps: List<AppEntry> = emptyList(),
     val favoriteKeys: Set<String> = emptySet(),
+    val widgetId: Int? = null,
+    val agendaOnOwnPage: Boolean = false,
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
     private val launcherApp = application as LauncherApplication
     private val appRepository = launcherApp.appRepository
     private val settingsRepository = launcherApp.settingsRepository
+    private val calendarRepository = CalendarRepository(application)
+    private val widgetHost = launcherApp.widgetHost
 
     var screen by mutableStateOf(Screen.Home)
         private set
@@ -42,6 +60,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var renameApp by mutableStateOf<AppEntry?>(null)
     var crashReport by mutableStateOf<String?>(null)
         private set
+
+    /** Upcoming events grouped by day; null hides the agenda (no calendar permission). */
+    var agenda by mutableStateOf<List<AgendaDay>?>(null)
+        private set
+    private var agendaJob: Job? = null
+    private var stopWatchingCalendar: (() -> Unit)? = null
+
+    /** Installed widgets while the picker is open, null otherwise. */
+    var widgetOptions by mutableStateOf<List<WidgetOption>?>(null)
+        private set
+    var widgetMenuOpen by mutableStateOf(false)
 
     val state: StateFlow<LauncherState> =
         combine(appRepository.apps, settingsRepository.settings, ::buildState)
@@ -62,6 +91,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             apps = labeled.filter { it.key !in settings.hidden },
             hiddenApps = labeled.filter { it.key in settings.hidden },
             favoriteKeys = settings.favorites.toSet(),
+            widgetId = settings.widgetId,
+            agendaOnOwnPage = settings.agendaOnOwnPage,
         )
     }
 
@@ -86,11 +117,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         screen = Screen.Settings
     }
 
+    fun openAgenda() {
+        screen = Screen.Agenda
+    }
+
     fun goHome() {
         screen = Screen.Home
         query = ""
         menuApp = null
         renameApp = null
+        widgetOptions = null
+        widgetMenuOpen = false
     }
 
     fun refreshApps() = appRepository.refresh()
@@ -145,9 +182,104 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settingsRepository.rename(app.key, name) }
     }
 
+    // Calendar
+
+    fun hasCalendarPermission() = calendarRepository.hasPermission()
+
+    /** Reloads the agenda; [debounce] coalesces bursts of change notifications during sync. */
+    fun refreshAgenda(debounce: Boolean = false) {
+        agendaJob?.cancel()
+        if (!calendarRepository.hasPermission()) {
+            agenda = null
+            return
+        }
+        agendaJob = viewModelScope.launch {
+            if (debounce) delay(500)
+            agenda = calendarRepository.load()
+        }
+    }
+
+    /** Keeps the agenda current while the launcher is visible. */
+    fun startWatchingCalendar() {
+        refreshAgenda()
+        if (stopWatchingCalendar == null && calendarRepository.hasPermission()) {
+            stopWatchingCalendar = calendarRepository.observe { refreshAgenda(debounce = true) }
+        }
+    }
+
+    fun stopWatchingCalendar() {
+        stopWatchingCalendar?.invoke()
+        stopWatchingCalendar = null
+    }
+
+    fun openEvent(event: AgendaEvent) = startActivity(calendarRepository.eventIntent(event))
+
+    fun openCalendarPermissionSettings() {
+        val context = getApplication<Application>()
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+    }
+
+    fun setAgendaOnOwnPage(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAgendaOnOwnPage(enabled) }
+    }
+
+    // Widget
+
+    fun openWidgetPicker() {
+        widgetMenuOpen = false
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val pm = context.packageManager
+            widgetOptions = withContext(Dispatchers.IO) {
+                val collator = Collator.getInstance().apply { strength = Collator.PRIMARY }
+                AppWidgetManager.getInstance(context).installedProviders
+                    .map { info ->
+                        val appLabel = runCatching {
+                            pm.getApplicationLabel(pm.getApplicationInfo(info.provider.packageName, 0)).toString()
+                        }.getOrElse { info.provider.packageName }
+                        WidgetOption(info, appLabel, info.loadLabel(pm).orEmpty().ifEmpty { appLabel })
+                    }
+                    .sortedWith { a, b ->
+                        collator.compare(a.appLabel, b.appLabel).takeIf { it != 0 } ?: collator.compare(a.label, b.label)
+                    }
+            }
+        }
+    }
+
+    fun closeWidgetPicker() {
+        widgetOptions = null
+    }
+
+    /** Shows [id] in the widget slot and releases the widget it replaces. */
+    fun setWidget(id: Int) {
+        viewModelScope.launch {
+            val previous = settingsRepository.setWidgetId(id)
+            if (previous != null && previous != id) widgetHost.deleteAppWidgetId(previous)
+        }
+    }
+
+    fun removeWidget() {
+        widgetMenuOpen = false
+        viewModelScope.launch {
+            settingsRepository.setWidgetId(null)?.let(widgetHost::deleteAppWidgetId)
+        }
+    }
+
+    /** Releases widget IDs left over from interrupted or crashed bind attempts. */
+    fun releaseOrphanedWidgets() {
+        viewModelScope.launch {
+            val keep = settingsRepository.settings.first().widgetId
+            widgetHost.appWidgetIds.filter { it != keep }.forEach(widgetHost::deleteAppWidgetId)
+        }
+    }
+
     fun dismissCrashReport() {
         CrashHandler.clear(getApplication())
         crashReport = null
+    }
+
+    override fun onCleared() {
+        stopWatchingCalendar()
     }
 
     private fun toast(message: String) {

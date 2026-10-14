@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -49,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import de.lennart.minilauncher.data.AgendaDay
+import de.lennart.minilauncher.data.AgendaEvent
 import de.lennart.minilauncher.data.AppEntry
 import kotlinx.coroutines.delay
 import java.text.NumberFormat
@@ -56,9 +60,16 @@ import java.text.NumberFormat
 @Composable
 fun HomeScreen(
     favorites: List<AppEntry>,
+    /** Shown below the clock when not null. */
+    agenda: List<AgendaDay>?,
+    onEventClick: (AgendaEvent) -> Unit,
+    widgetId: Int?,
+    onWidgetLongPress: () -> Unit,
     onLaunch: (AppEntry) -> Unit,
     onAppLongPress: (AppEntry) -> Unit,
     onOpenDrawer: () -> Unit,
+    /** Opens the agenda page on swipe left; null when the agenda isn't on its own page. */
+    onOpenAgenda: (() -> Unit)?,
     onOpenSettings: () -> Unit,
     onStartActivity: (Intent, Intent?) -> Unit,
 ) {
@@ -67,12 +78,15 @@ fun HomeScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                // Swiping right opens the app list.
+            .pointerInput(onOpenAgenda == null) {
+                // Swiping right opens the app list, swiping left the agenda page.
                 var total = 0f
                 detectHorizontalDragGestures(
                     onDragStart = { total = 0f },
-                    onDragEnd = { if (total > swipeThreshold) onOpenDrawer() },
+                    onDragEnd = {
+                        if (total > swipeThreshold) onOpenDrawer()
+                        if (total < -swipeThreshold) onOpenAgenda?.invoke()
+                    },
                     onHorizontalDrag = { _, dragAmount -> total += dragAmount },
                 )
             }
@@ -84,6 +98,7 @@ fun HomeScreen(
             Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -103,8 +118,16 @@ fun HomeScreen(
                     )
                 },
             )
-            // Favorites hang at a fixed distance below the date, so clock and apps read as one group.
-            Spacer(Modifier.height(44.dp))
+            if (agenda != null) {
+                Spacer(Modifier.height(28.dp))
+                Agenda(agenda, onEventClick)
+            }
+            if (widgetId != null) {
+                Spacer(Modifier.height(28.dp))
+                WidgetSlot(widgetId, onLongPress = onWidgetLongPress)
+            }
+            // Favorites hang at a fixed distance below what's above them, so everything reads as one group.
+            Spacer(Modifier.height(if (agenda == null && widgetId == null) 44.dp else 28.dp))
             favorites.forEach { app ->
                 Text(
                     text = app.label,
@@ -118,6 +141,7 @@ fun HomeScreen(
                         .padding(horizontal = 24.dp, vertical = 11.dp),
                 )
             }
+            Spacer(Modifier.height(32.dp))
         }
     }
 }

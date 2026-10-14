@@ -26,17 +26,28 @@ swipe_up() { adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4
 # The app list is open when its search field is on screen.
 drawer_open() { [ -n "$(find_text "Search")" ]; }
 
-# Prints the centre "x y" of the last node whose text is exactly $1.
-find_text() {
+# Prints the UI hierarchy, one node per line.
+dump_ui() {
   local i
   for i in 1 2 3 4 5; do
     adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && break
     sleep 1
   done
-  adb exec-out cat /sdcard/ui.xml | tr '>' '\n' | grep -F "text=\"$1\"" | tail -1 |
+  adb exec-out cat /sdcard/ui.xml | tr '>' '\n'
+}
+
+# Prints the centre "x y" of the last node with attribute $1 exactly "$2".
+find_attr() {
+  dump_ui | grep -F "$1=\"$2\"" | tail -1 |
     sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' |
     awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }'
 }
+
+# Prints the centre "x y" of the last node whose text is exactly $1.
+find_text() { find_attr text "$1"; }
+
+# Succeeds if some node's text contains $1.
+has_text() { dump_ui | grep -F "text=\"" | grep -qF "$1"; }
 
 # Waits until the launcher has drawn its UI; the first start can take a while.
 wait_for_launcher() {
@@ -68,6 +79,32 @@ long_press_text() {
 }
 
 adb install -r "$APK"
+# Calendar access and widget binding normally need a dialog each; pre-grant both.
+adb shell pm grant "$PKG" android.permission.READ_CALENDAR
+adb shell appwidget grantbind --package "$PKG" --user 0 || true
+
+# A local calendar with a timed and an all-day event for the agenda.
+events_added=0
+adb shell content insert \
+  --uri "'content://com.android.calendar/calendars?caller_is_syncadapter=true&account_name=smoke&account_type=LOCAL'" \
+  --bind account_name:s:smoke --bind account_type:s:LOCAL --bind name:s:Smoke \
+  --bind calendar_displayName:s:Smoke --bind calendar_access_level:i:700 --bind ownerAccount:s:smoke \
+  --bind visible:i:1 --bind sync_events:i:1 --bind calendar_timezone:s:UTC || true
+CAL_ID=$(adb shell content query --uri content://com.android.calendar/calendars --projection _id:name |
+  grep -F 'name=Smoke' | sed -nE 's/.*_id=([0-9]+).*/\1/p' | head -1)
+if [ -n "$CAL_ID" ]; then
+  NOW_MS=$(( $(date +%s) * 1000 ))
+  HOUR_MS=3600000
+  TOMORROW_UTC_MS=$(( ($(date +%s) / 86400 + 1) * 86400 * 1000 ))
+  adb shell content insert --uri content://com.android.calendar/events \
+    --bind calendar_id:i:"$CAL_ID" --bind title:s:Dentist --bind eventTimezone:s:UTC \
+    --bind dtstart:l:$((NOW_MS + 2 * HOUR_MS)) --bind dtend:l:$((NOW_MS + 3 * HOUR_MS)) &&
+  adb shell content insert --uri content://com.android.calendar/events \
+    --bind calendar_id:i:"$CAL_ID" --bind title:s:Holiday --bind eventTimezone:s:UTC --bind allDay:i:1 \
+    --bind dtstart:l:"$TOMORROW_UTC_MS" --bind dtend:l:$((TOMORROW_UTC_MS + 3 * 86400000)) &&
+  events_added=1
+fi
+echo "Calendar events added: $events_added"
 adb shell cmd role add-role-holder android.app.role.HOME "$PKG" || true
 adb shell cmd package set-home-activity "$PKG/.MainActivity" || true
 adb logcat -c
@@ -80,6 +117,9 @@ adb shell wm dismiss-keyguard || true
 home
 wait_for_launcher
 shot 01-home-empty
+if [ "$events_added" -eq 1 ]; then
+  has_text Dentist || { echo "Agenda does not show the calendar event"; exit 1; }
+fi
 
 swipe_right
 shot 02-app-list
@@ -107,8 +147,10 @@ echo "Favorites added: $added"
 home
 shot 05-home-favorites
 
-# Long-press empty space below the favorites opens settings.
-adb shell input swipe $((W / 2)) $((H * 92 / 100)) $((W / 2)) $((H * 92 / 100)) 1200
+# Long-press on empty space above the clock opens settings (below the favorites may be
+# scrolled content once the agenda and widget are shown).
+open_settings() { adb shell input swipe $((W / 2)) $((H * 8 / 100)) $((W / 2)) $((H * 8 / 100)) 1200; sleep 1.5; }
+open_settings
 shot 06-settings
 
 # Back returns home; Back on home does nothing.
@@ -138,6 +180,53 @@ shot 09-home-again
 adb shell dumpsys battery set level 12
 shot 10-home-low-battery
 adb shell dumpsys battery reset
+
+# Widget slot: add a widget from settings, then long-press it to get its menu.
+home
+open_settings
+tap_text "Add"
+shot 11-widget-picker
+# First entry below the picker title.
+first_widget=$(dump_ui | grep -F 'text="' | sed -nE 's/.*text="([^"]+)".*/\1/p' |
+  grep -A1 -x 'Choose widget' | tail -1)
+if [ -n "$first_widget" ] && [ "$first_widget" != "Choose widget" ] && [ "$first_widget" != "No widgets installed" ]; then
+  echo "Adding widget: $first_widget"
+  tap_text "$first_widget"
+  sleep 3
+  # Leave a configure activity, if the widget opened one, by accepting its defaults is not
+  # generic; going home instead cancels it, which must not crash either.
+  home
+  shot 12-home-widget
+  p=$(find_attr content-desc "Home widget")
+  if [ -n "$p" ]; then
+    set -- $p
+    adb shell input swipe "$1" "$2" "$1" "$2" 1200
+    sleep 1.5
+    shot 13-widget-menu
+    tap_text "Remove widget"
+    shot 14-widget-removed
+    [ -z "$(find_attr content-desc "Home widget")" ] || { echo "Widget was not removed"; exit 1; }
+  else
+    echo "Widget not on home (needs configuration?)"
+  fi
+else
+  echo "No widgets to add"
+  home
+fi
+
+# Agenda on its own page: swipe left from home, swipe right back.
+if [ "$events_added" -eq 1 ]; then
+  home
+  open_settings
+  tap_text "Change"
+  home
+  swipe_left
+  shot 15-agenda-page
+  [ -n "$(find_text "Next 7 days")" ] || { echo "Swipe left did not open the agenda"; exit 1; }
+  swipe_right
+  [ -z "$(find_text "Next 7 days")" ] || { echo "Swipe right did not close the agenda"; exit 1; }
+  shot 16-home-without-agenda
+fi
 
 adb logcat -d > "$OUT/logcat.txt"
 adb logcat -d -b crash > "$OUT/crash-buffer.txt" || true

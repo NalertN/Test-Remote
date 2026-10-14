@@ -10,9 +10,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import de.lennart.minilauncher.ui.LauncherRoot
 import de.lennart.minilauncher.ui.LauncherTheme
+import de.lennart.minilauncher.widget.WidgetBinder
 
 class MainActivity : ComponentActivity() {
     private val viewModel: LauncherViewModel by viewModels()
+    private val widgetHost get() = (application as LauncherApplication).widgetHost
+    private val widgetBinder = WidgetBinder(this, { widgetHost }, onBound = { viewModel.setWidget(it) })
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -20,9 +23,17 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        widgetBinder.restoreState(savedInstanceState)
+        if (!widgetBinder.isBinding) viewModel.releaseOrphanedWidgets()
         setContent {
             LauncherTheme {
-                LauncherRoot(viewModel)
+                LauncherRoot(
+                    viewModel,
+                    onBindWidget = {
+                        viewModel.closeWidgetPicker()
+                        widgetBinder.bind(it)
+                    },
+                )
             }
         }
     }
@@ -36,11 +47,28 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.refreshApps()
+        viewModel.startWatchingCalendar()
+        runCatching { widgetHost.startListening() }
     }
 
     override fun onStop() {
         super.onStop()
+        runCatching { widgetHost.stopListening() }
+        viewModel.stopWatchingCalendar()
         // Always come back to the home screen after leaving the launcher.
         viewModel.goHome()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        widgetBinder.saveState(outState)
+    }
+
+    @Deprecated("Widget configure activities can only be started via AppWidgetHost, which reports here.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!widgetBinder.onActivityResult(requestCode, resultCode)) {
+            @Suppress("DEPRECATION")
+            super.onActivityResult(requestCode, resultCode, data)
+        }
     }
 }
