@@ -1,6 +1,15 @@
 package de.lennart.minilauncher.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,32 +35,47 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             return@Box
         }
 
-        when (viewModel.screen) {
-            Screen.Home -> HomeScreen(
-                favorites = state.favorites,
-                onLaunch = viewModel::launch,
-                onAppLongPress = { viewModel.menuApp = it },
-                onOpenDrawer = viewModel::openDrawer,
-                onOpenSettings = viewModel::openSettings,
-                onStartActivity = viewModel::startActivity,
-            )
-            Screen.Drawer -> AppDrawer(
-                apps = viewModel.filteredApps(state.apps, viewModel.query),
-                query = viewModel.query,
-                onQueryChange = { viewModel.query = it },
-                onLaunch = viewModel::launch,
-                onAppLongPress = { viewModel.menuApp = it },
-                onClose = viewModel::goHome,
-            )
-            Screen.Settings -> SettingsScreen(
-                favorites = state.favorites,
-                hiddenApps = state.hiddenApps,
-                onMoveFavorite = viewModel::moveFavorite,
-                onRemoveFavorite = viewModel::toggleFavorite,
-                onUnhide = { viewModel.setHidden(it, false) },
-                onStartActivity = viewModel::startActivity,
-                onClose = viewModel::goHome,
-            )
+        AnimatedContent(
+            targetState = viewModel.screen,
+            transitionSpec = {
+                // The app list slides in from the left, matching the swipe-right gesture.
+                val drawerOpening = targetState == Screen.Drawer
+                val drawerClosing = initialState == Screen.Drawer
+                val enter = fadeIn(tween(220)) +
+                    if (drawerOpening) slideInHorizontally(tween(220)) { -it / 5 } else EnterTransition.None
+                val exit = fadeOut(tween(160)) +
+                    if (drawerClosing) slideOutHorizontally(tween(160)) { -it / 5 } else ExitTransition.None
+                enter togetherWith exit
+            },
+            label = "screen",
+        ) { screen ->
+            when (screen) {
+                Screen.Home -> HomeScreen(
+                    favorites = state.favorites,
+                    onLaunch = viewModel::launch,
+                    onAppLongPress = { viewModel.menuApp = it },
+                    onOpenDrawer = viewModel::openDrawer,
+                    onOpenSettings = viewModel::openSettings,
+                    onStartActivity = viewModel::startActivity,
+                )
+                Screen.Drawer -> AppDrawer(
+                    apps = viewModel.filteredApps(state.apps, viewModel.query),
+                    query = viewModel.query,
+                    onQueryChange = { viewModel.query = it },
+                    onLaunch = viewModel::launch,
+                    onAppLongPress = { viewModel.menuApp = it },
+                    onClose = viewModel::goHome,
+                )
+                Screen.Settings -> SettingsScreen(
+                    favorites = state.favorites,
+                    hiddenApps = state.hiddenApps,
+                    onMoveFavorite = viewModel::moveFavorite,
+                    onRemoveFavorite = viewModel::toggleFavorite,
+                    onUnhide = { viewModel.setHidden(it, false) },
+                    onStartActivity = viewModel::startActivity,
+                    onClose = viewModel::goHome,
+                )
+            }
         }
 
         viewModel.menuApp?.let { app ->

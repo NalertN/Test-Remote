@@ -18,7 +18,13 @@ shot() {
 }
 
 home() { adb shell input keyevent KEYCODE_HOME; sleep 1.5; }
+# Starts away from the screen edges, which belong to the system back gesture.
+swipe_right() { adb shell input swipe $((W / 5)) $((H * 6 / 10)) $((W * 4 / 5)) $((H * 6 / 10)) 200; sleep 1.5; }
+swipe_left() { adb shell input swipe $((W * 4 / 5)) $((H * 6 / 10)) $((W / 5)) $((H * 6 / 10)) 200; sleep 1.5; }
 swipe_up() { adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 200; sleep 1.5; }
+
+# The app list is open when its search field is on screen.
+drawer_open() { [ -n "$(find_text "Search")" ]; }
 
 # Prints the centre "x y" of the last node whose text is exactly $1.
 find_text() {
@@ -75,8 +81,9 @@ home
 wait_for_launcher
 shot 01-home-empty
 
-swipe_up
+swipe_right
 shot 02-app-list
+drawer_open || { echo "Swipe right did not open the app list"; exit 1; }
 
 adb shell input text "c"
 shot 03-search
@@ -87,7 +94,7 @@ added=0
 for app in Settings Clock Contacts Chrome Camera Phone Files Messages; do
   [ "$added" -ge 4 ] && break
   home
-  swipe_up
+  swipe_right
   adb shell input text "${app%?}"
   sleep 1
   if long_press_text "$app"; then
@@ -110,8 +117,16 @@ sleep 1
 adb shell input keyevent KEYCODE_BACK
 shot 07-home-after-back
 
-# Enter launches the top search result.
+# Swipe left closes the app list; swiping up on home does nothing.
+swipe_right
+swipe_left
+drawer_open && { echo "Swipe left did not close the app list"; exit 1; }
 swipe_up
+drawer_open && { echo "Swipe up should not open the app list"; exit 1; }
+home
+
+# Enter launches the top search result.
+swipe_right
 adb shell input text "Sett"
 adb shell input keyevent KEYCODE_ENTER
 shot 08-enter-launches-top-result

@@ -12,7 +12,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -68,11 +68,12 @@ fun HomeScreen(
         Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
+                // Swiping right opens the app list.
                 var total = 0f
-                detectVerticalDragGestures(
+                detectHorizontalDragGestures(
                     onDragStart = { total = 0f },
-                    onDragEnd = { if (total < -swipeThreshold) onOpenDrawer() },
-                    onVerticalDrag = { _, dragAmount -> total += dragAmount },
+                    onDragEnd = { if (total > swipeThreshold) onOpenDrawer() },
+                    onHorizontalDrag = { _, dragAmount -> total += dragAmount },
                 )
             }
             .pointerInput(Unit) {
