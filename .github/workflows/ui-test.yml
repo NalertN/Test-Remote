@@ -8,6 +8,11 @@ jobs:
   emulator:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Android 16 and 17, the versions a Pixel 10 runs.
+        api-level: ['36', '37.0']
     steps:
       - uses: actions/checkout@v5
 
@@ -30,10 +35,10 @@ jobs:
       - name: Run smoke test on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_10
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash scripts/ui-smoke-test.sh
 
@@ -41,5 +46,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-api-${{ matrix.api-level }}
           path: screenshots/
