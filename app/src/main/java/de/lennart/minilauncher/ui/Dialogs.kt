@@ -43,6 +43,28 @@ fun AppActionsDialog(
     onAppInfo: () -> Unit,
     onUninstall: () -> Unit,
 ) {
+    fun action(label: String, danger: Boolean = false, block: () -> Unit) = DialogAction(label, danger) {
+        onDismiss()
+        block()
+    }
+    ActionsDialog(
+        title = app.label,
+        actions = listOf(
+            action(if (isFavorite) "Remove from favorites" else "Add to favorites", block = onToggleFavorite),
+            action("Rename", block = onRename),
+            action(if (isHidden) "Unhide" else "Hide") { onToggleHidden(!isHidden) },
+            action("App info", block = onAppInfo),
+            action("Uninstall", danger = true, block = onUninstall),
+        ),
+        onDismiss = onDismiss,
+    )
+}
+
+data class DialogAction(val label: String, val danger: Boolean = false, val onClick: () -> Unit)
+
+/** Rounded sheet with a dim title and a centered list of text actions. */
+@Composable
+fun ActionsDialog(title: String, actions: List<DialogAction>, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             color = SurfaceColor,
@@ -54,32 +76,22 @@ fun AppActionsDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    app.label,
+                    title,
                     color = DimText,
                     fontSize = TypeScale.Caption,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
-                fun action(label: String, block: () -> Unit) = label to {
-                    onDismiss()
-                    block()
-                }
-                listOf(
-                    action(if (isFavorite) "Remove from favorites" else "Add to favorites", onToggleFavorite),
-                    action("Rename", onRename),
-                    action(if (isHidden) "Unhide" else "Hide") { onToggleHidden(!isHidden) },
-                    action("App info", onAppInfo),
-                    action("Uninstall", onUninstall),
-                ).forEach { (label, onClick) ->
+                actions.forEach { action ->
                     Text(
-                        label,
-                        color = if (label == "Uninstall") DangerColor else Color.White,
+                        action.label,
+                        color = if (action.danger) DangerColor else Color.White,
                         fontSize = TypeScale.Body,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .plainClickable(onClick = onClick)
+                            .plainClickable(onClick = action.onClick)
                             .padding(vertical = 13.dp),
                     )
                 }

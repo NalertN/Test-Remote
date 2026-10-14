@@ -34,7 +34,6 @@ private val LauncherColors = darkColorScheme(
 
 /** One modular type scale (ratio ~1.27) used across all screens. */
 object TypeScale {
-    val Time = 64.sp
     val Title = 26.sp
     val Body = 20.sp
     val Caption = 15.sp

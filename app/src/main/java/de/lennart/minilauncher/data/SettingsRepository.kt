@@ -2,7 +2,9 @@ package de.lennart.minilauncher.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -16,6 +18,10 @@ data class LauncherSettings(
     val favorites: List<String> = emptyList(),
     val hidden: Set<String> = emptySet(),
     val renames: Map<String, String> = emptyMap(),
+    /** App widget shown on the home screen, if any. */
+    val widgetId: Int? = null,
+    /** Show the calendar agenda on its own page (swipe left) instead of on the home screen. */
+    val agendaOnOwnPage: Boolean = false,
 )
 
 class SettingsRepository(context: Context) {
@@ -26,6 +32,8 @@ class SettingsRepository(context: Context) {
             favorites = prefs.favorites(),
             hidden = prefs[HIDDEN] ?: emptySet(),
             renames = prefs.renames(),
+            widgetId = prefs[WIDGET_ID],
+            agendaOnOwnPage = prefs[AGENDA_OWN_PAGE] ?: false,
         )
     }
 
@@ -62,6 +70,20 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    /** Stores the home widget ([id] null removes it) and returns the previous one. */
+    suspend fun setWidgetId(id: Int?): Int? {
+        var previous: Int? = null
+        dataStore.edit { prefs ->
+            previous = prefs[WIDGET_ID]
+            if (id == null) prefs.remove(WIDGET_ID) else prefs[WIDGET_ID] = id
+        }
+        return previous
+    }
+
+    suspend fun setAgendaOnOwnPage(enabled: Boolean) {
+        dataStore.edit { it[AGENDA_OWN_PAGE] = enabled }
+    }
+
     private fun Preferences.favorites(): List<String> =
         this[FAVORITES]?.split(SEPARATOR)?.filter { it.isNotEmpty() } ?: emptyList()
 
@@ -79,5 +101,7 @@ class SettingsRepository(context: Context) {
         private val FAVORITES = stringPreferencesKey("favorites")
         private val HIDDEN = stringSetPreferencesKey("hidden")
         private val RENAMES = stringPreferencesKey("renames")
+        private val WIDGET_ID = intPreferencesKey("widget_id")
+        private val AGENDA_OWN_PAGE = booleanPreferencesKey("agenda_own_page")
     }
 }

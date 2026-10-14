@@ -29,6 +29,13 @@ import de.lennart.minilauncher.data.AppEntry
 fun SettingsScreen(
     favorites: List<AppEntry>,
     hiddenApps: List<AppEntry>,
+    hasWidget: Boolean,
+    onChooseWidget: () -> Unit,
+    onRemoveWidget: () -> Unit,
+    calendarAllowed: Boolean,
+    onAllowCalendar: () -> Unit,
+    agendaOnOwnPage: Boolean,
+    onAgendaOnOwnPageChange: (Boolean) -> Unit,
     onMoveFavorite: (AppEntry, Int) -> Unit,
     onRemoveFavorite: (AppEntry) -> Unit,
     onUnhide: (AppEntry) -> Unit,
@@ -74,19 +81,33 @@ fun SettingsScreen(
             }
         }
 
+        item { SectionTitle("Widget") }
+        item {
+            AppRow(if (hasWidget) "Home widget" else "No widget") {
+                ActionText(if (hasWidget) "Replace" else "Add", onClick = onChooseWidget)
+                if (hasWidget) ActionText("Remove", dim = true, onClick = onRemoveWidget)
+            }
+        }
+        item { Hint("Shown below the agenda. Long-press it to replace or remove.") }
+
+        item { SectionTitle("Calendar") }
+        if (calendarAllowed) {
+            item {
+                AppRow(if (agendaOnOwnPage) "Agenda on its own page" else "Agenda on the home screen") {
+                    ActionText("Change", dim = true) { onAgendaOnOwnPageChange(!agendaOnOwnPage) }
+                }
+            }
+            if (agendaOnOwnPage) item { Hint("Swipe left on the home screen to see it.") }
+        } else {
+            item { SettingLink("Allow calendar access", onAllowCalendar) }
+            item { Hint("Under Permissions → Calendar. The agenda stays hidden until then.") }
+        }
+
         item { SectionTitle("Launcher") }
         item {
-            Text(
-                "Choose default launcher",
-                color = Color.White,
-                fontSize = TypeScale.Body,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .plainClickable {
-                        onStartActivity(Intent(Settings.ACTION_HOME_SETTINGS), Intent(Settings.ACTION_SETTINGS))
-                    }
-                    .padding(vertical = 12.dp),
-            )
+            SettingLink("Choose default launcher") {
+                onStartActivity(Intent(Settings.ACTION_HOME_SETTINGS), Intent(Settings.ACTION_SETTINGS))
+            }
         }
         item {
             Text(
@@ -97,6 +118,19 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+@Composable
+private fun SettingLink(text: String, onClick: () -> Unit) {
+    Text(
+        text,
+        color = Color.White,
+        fontSize = TypeScale.Body,
+        modifier = Modifier
+            .fillMaxWidth()
+            .plainClickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+    )
 }
 
 @Composable

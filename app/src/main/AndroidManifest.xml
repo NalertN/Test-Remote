@@ -3,11 +3,17 @@
 
     <!-- Needed for ACTION_DELETE (uninstall prompt). -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Agenda below the clock; requested at runtime, the agenda stays hidden without it. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Makes widget providers visible to the widget picker. -->
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         </intent>
     </queries>
 
