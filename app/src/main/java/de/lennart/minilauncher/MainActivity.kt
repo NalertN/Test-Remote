@@ -15,7 +15,7 @@ import de.lennart.minilauncher.widget.WidgetBinder
 class MainActivity : ComponentActivity() {
     private val viewModel: LauncherViewModel by viewModels()
     private val widgetHost get() = (application as LauncherApplication).widgetHost
-    private val widgetBinder = WidgetBinder(this, { widgetHost }, onBound = { viewModel.setWidget(it) })
+    private val widgetBinder = WidgetBinder(this, { widgetHost }, onBound = { page, id -> viewModel.setWidget(page, id) })
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -29,10 +29,7 @@ class MainActivity : ComponentActivity() {
             LauncherTheme {
                 LauncherRoot(
                     viewModel,
-                    onBindWidget = {
-                        viewModel.closeWidgetPicker()
-                        widgetBinder.bind(it)
-                    },
+                    onBindWidget = { info, page -> widgetBinder.bind(info, page) },
                 )
             }
         }
@@ -47,14 +44,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.refreshApps()
-        viewModel.startWatchingCalendar()
         runCatching { widgetHost.startListening() }
     }
 
     override fun onStop() {
         super.onStop()
         runCatching { widgetHost.stopListening() }
-        viewModel.stopWatchingCalendar()
         // Always come back to the home screen after leaving the launcher.
         viewModel.goHome()
     }

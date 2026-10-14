@@ -2,10 +2,10 @@ package de.lennart.minilauncher.ui
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,28 +28,45 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import de.lennart.minilauncher.LauncherApplication
+import de.lennart.minilauncher.Swipe
 import de.lennart.minilauncher.WidgetOption
 import de.lennart.minilauncher.widget.LongPressWidgetHostView
 
-/** Hosts the bound app widget; long-pressing it calls [onLongPress]. */
+/**
+ * The widget above a page's favorites, filling the space the favorites leave. Without a widget
+ * (or if its app is gone) a dim hint is shown; long-pressing it opens the widget picker.
+ * [swipes] are the page swipes the widget view forwards to [onSwipe].
+ */
 @Composable
-fun WidgetSlot(widgetId: Int, onLongPress: () -> Unit, modifier: Modifier = Modifier) {
+fun WidgetSlot(
+    page: Int,
+    widgetId: Int?,
+    swipes: Set<Swipe>,
+    onSwipe: (Swipe) -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val host = (context.applicationContext as LauncherApplication).widgetHost
-    val info = remember(widgetId) { AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId) }
+    val info = remember(widgetId) {
+        widgetId?.let { AppWidgetManager.getInstance(context).getAppWidgetInfo(it) }
+    }
     val currentOnLongPress by rememberUpdatedState(onLongPress)
+    val currentOnSwipe by rememberUpdatedState(onSwipe)
 
-    if (info == null) {
-        // The widget's app was uninstalled or disabled.
-        Text(
-            "Widget unavailable · long-press to change",
-            color = DimText,
-            fontSize = TypeScale.Caption,
-            textAlign = TextAlign.Center,
-            modifier = modifier
-                .plainClickable(onLongClick = onLongPress) {}
-                .padding(16.dp),
-        )
+    if (widgetId == null || info == null) {
+        // Nothing to show: no widget yet, or its app was uninstalled or disabled.
+        Box(
+            modifier.fillMaxWidth().plainClickable(onLongClick = onLongPress) {},
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (widgetId == null) HINT_ADD_WIDGET else "Widget unavailable · long-press to change",
+                color = DimText,
+                fontSize = TypeScale.Caption,
+                textAlign = TextAlign.Center,
+            )
+        }
         return
     }
 
@@ -57,19 +74,21 @@ fun WidgetSlot(widgetId: Int, onLongPress: () -> Unit, modifier: Modifier = Modi
         AndroidView(
             factory = { viewContext ->
                 (host.createView(viewContext, widgetId, info) as LongPressWidgetHostView).apply {
+                    contentDescription = if (page == 0) "Home widget" else "Second page widget"
                     this.onLongPress = { currentOnLongPress() }
-                    contentDescription = "Home widget"
+                    this.onSwipe = { currentOnSwipe(it) }
                 }
             },
+            update = { it.swipes = swipes },
             modifier = modifier
                 .fillMaxWidth()
-                .height(WidgetHeight)
                 .clip(RoundedCornerShape(24.dp)),
         )
     }
 }
 
-private val WidgetHeight = 320.dp
+/** Shown in an empty widget slot; the UI smoke test looks for this text. */
+const val HINT_ADD_WIDGET = "Long-press to add a widget"
 
 /** Text-only list of all installed widgets, by app. */
 @Composable
@@ -103,9 +122,9 @@ fun WidgetPickerDialog(options: List<WidgetOption>, onPick: (AppWidgetProviderIn
 }
 
 @Composable
-fun WidgetActionsDialog(onReplace: () -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
+fun WidgetActionsDialog(page: Int, onReplace: () -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
     ActionsDialog(
-        title = "Widget",
+        title = if (page == 0) "Home widget" else "Second page widget",
         actions = listOf(
             DialogAction("Replace widget", onClick = onReplace),
             DialogAction("Remove widget", danger = true, onClick = onRemove),

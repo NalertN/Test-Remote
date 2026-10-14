@@ -1,7 +1,6 @@
 package de.lennart.minilauncher.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,8 +32,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -84,20 +81,9 @@ fun AppDrawer(
         }
     }
 
-    val swipeThreshold = with(LocalDensity.current) { 80.dp.toPx() }
-
     Column(
         Modifier
             .fillMaxSize()
-            .pointerInput(onClose) {
-                // Swiping left goes back home, mirroring the swipe right that opened the list.
-                var total = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { total = 0f },
-                    onDragEnd = { if (total < -swipeThreshold) onClose() },
-                    onHorizontalDrag = { _, dragAmount -> total += dragAmount },
-                )
-            }
             .safeDrawingPadding()
             .imePadding()
             .padding(horizontal = 32.dp),

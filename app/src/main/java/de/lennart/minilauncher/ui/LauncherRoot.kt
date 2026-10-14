@@ -1,10 +1,7 @@
 package de.lennart.minilauncher.ui
 
-import android.Manifest
 import android.appwidget.AppWidgetProviderInfo
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -12,17 +9,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,20 +25,8 @@ import de.lennart.minilauncher.LauncherViewModel
 import de.lennart.minilauncher.Screen
 
 @Composable
-fun LauncherRoot(viewModel: LauncherViewModel, onBindWidget: (AppWidgetProviderInfo) -> Unit) {
+fun LauncherRoot(viewModel: LauncherViewModel, onBindWidget: (AppWidgetProviderInfo, page: Int) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    // Ask for calendar access once; if denied, the agenda simply stays hidden.
-    var calendarAsked by rememberSaveable { mutableStateOf(false) }
-    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        viewModel.startWatchingCalendar()
-    }
-    LaunchedEffect(Unit) {
-        if (!calendarAsked && !viewModel.hasCalendarPermission()) {
-            calendarAsked = true
-            calendarPermission.launch(Manifest.permission.READ_CALENDAR)
-        }
-    }
 
     // On the home screen Back does nothing; elsewhere it returns home.
     BackHandler { viewModel.goHome() }
@@ -58,34 +41,42 @@ fun LauncherRoot(viewModel: LauncherViewModel, onBindWidget: (AppWidgetProviderI
         AnimatedContent(
             targetState = viewModel.screen,
             transitionSpec = {
-                // The app list slides in from the left and the agenda from the right, matching the swipes.
-                fun offset(screen: Screen): ((Int) -> Int)? = when (screen) {
-                    Screen.Drawer -> { width -> -width / 5 }
-                    Screen.Agenda -> { width -> width / 5 }
-                    else -> null
+                // The second page slides in from the left, matching the swipe right that opens it;
+                // the app list rises from the bottom, matching the swipe up.
+                fun enter(screen: Screen): EnterTransition = when (screen) {
+                    Screen.Second -> slideInHorizontally(tween(220)) { -it / 5 }
+                    Screen.Drawer -> slideInVertically(tween(220)) { it / 5 }
+                    else -> EnterTransition.None
                 }
-                val enter = fadeIn(tween(220)) +
-                    (offset(targetState)?.let { slideInHorizontally(tween(220), it) } ?: EnterTransition.None)
-                val exit = fadeOut(tween(160)) +
-                    (offset(initialState)?.let { slideOutHorizontally(tween(160), it) } ?: ExitTransition.None)
-                enter togetherWith exit
+                fun exit(screen: Screen): ExitTransition = when (screen) {
+                    Screen.Second -> slideOutHorizontally(tween(160)) { -it / 5 }
+                    Screen.Drawer -> slideOutVertically(tween(160)) { it / 5 }
+                    else -> ExitTransition.None
+                }
+                (fadeIn(tween(220)) + enter(targetState)) togetherWith (fadeOut(tween(160)) + exit(initialState))
             },
             label = "screen",
         ) { screen ->
             when (screen) {
-                Screen.Home -> HomeScreen(
-                    favorites = state.favorites,
-                    agenda = viewModel.agenda.takeUnless { state.agendaOnOwnPage },
-                    onEventClick = viewModel::openEvent,
-                    widgetId = state.widgetId,
-                    onWidgetLongPress = { viewModel.widgetMenuOpen = true },
-                    onLaunch = viewModel::launch,
-                    onAppLongPress = { viewModel.menuApp = it },
-                    onOpenDrawer = viewModel::openDrawer,
-                    onOpenAgenda = viewModel::openAgenda.takeIf { state.agendaOnOwnPage && viewModel.agenda != null },
-                    onOpenSettings = viewModel::openSettings,
-                    onStartActivity = viewModel::startActivity,
-                )
+                Screen.Home, Screen.Second -> {
+                    val page = if (screen == Screen.Home) 0 else 1
+                    FavoritesPage(
+                        page = page,
+                        favorites = state.favorites[page],
+                        widgetId = state.widgetIds[page],
+                        onLaunch = viewModel::launch,
+                        onAppLongPress = { viewModel.menuApp = it },
+                        onWidgetLongPress = {
+                            if (state.widgetIds[page] == null) viewModel.openWidgetPicker(page)
+                            else viewModel.widgetMenuPage = page
+                        },
+                        onSwipeUp = viewModel::openDrawer,
+                        onSwipeRight = viewModel::openSecondPage.takeIf { page == 0 },
+                        onSwipeLeft = viewModel::goHome.takeIf { page == 1 },
+                        onOpenSettings = viewModel::openSettings,
+                        onStartActivity = viewModel::startActivity,
+                    )
+                }
                 Screen.Drawer -> AppDrawer(
                     apps = viewModel.filteredApps(state.apps, viewModel.query),
                     query = viewModel.query,
@@ -94,21 +85,12 @@ fun LauncherRoot(viewModel: LauncherViewModel, onBindWidget: (AppWidgetProviderI
                     onAppLongPress = { viewModel.menuApp = it },
                     onClose = viewModel::goHome,
                 )
-                Screen.Agenda -> AgendaScreen(
-                    days = viewModel.agenda.orEmpty(),
-                    onEventClick = viewModel::openEvent,
-                    onClose = viewModel::goHome,
-                )
                 Screen.Settings -> SettingsScreen(
                     favorites = state.favorites,
                     hiddenApps = state.hiddenApps,
-                    hasWidget = state.widgetId != null,
+                    widgetIds = state.widgetIds,
                     onChooseWidget = viewModel::openWidgetPicker,
                     onRemoveWidget = viewModel::removeWidget,
-                    calendarAllowed = viewModel.hasCalendarPermission(),
-                    onAllowCalendar = viewModel::openCalendarPermissionSettings,
-                    agendaOnOwnPage = state.agendaOnOwnPage,
-                    onAgendaOnOwnPageChange = viewModel::setAgendaOnOwnPage,
                     onMoveFavorite = viewModel::moveFavorite,
                     onRemoveFavorite = viewModel::toggleFavorite,
                     onUnhide = { viewModel.setHidden(it, false) },
@@ -121,10 +103,10 @@ fun LauncherRoot(viewModel: LauncherViewModel, onBindWidget: (AppWidgetProviderI
         viewModel.menuApp?.let { app ->
             AppActionsDialog(
                 app = app,
-                isFavorite = app.key in state.favoriteKeys,
+                isFavorite = state.favoriteKeys.map { app.key in it },
                 isHidden = state.hiddenApps.any { it.key == app.key },
                 onDismiss = { viewModel.menuApp = null },
-                onToggleFavorite = { viewModel.toggleFavorite(app) },
+                onToggleFavorite = { page -> viewModel.toggleFavorite(page, app) },
                 onRename = { viewModel.renameApp = app },
                 onToggleHidden = { hidden -> viewModel.setHidden(app, hidden) },
                 onAppInfo = { viewModel.openAppInfo(app) },
@@ -132,16 +114,26 @@ fun LauncherRoot(viewModel: LauncherViewModel, onBindWidget: (AppWidgetProviderI
             )
         }
 
-        if (viewModel.widgetMenuOpen) {
+        viewModel.widgetMenuPage?.let { page ->
             WidgetActionsDialog(
-                onReplace = viewModel::openWidgetPicker,
-                onRemove = viewModel::removeWidget,
-                onDismiss = { viewModel.widgetMenuOpen = false },
+                page = page,
+                onReplace = { viewModel.openWidgetPicker(page) },
+                onRemove = { viewModel.removeWidget(page) },
+                onDismiss = { viewModel.widgetMenuPage = null },
             )
         }
 
-        viewModel.widgetOptions?.let { options ->
-            WidgetPickerDialog(options, onPick = onBindWidget, onDismiss = viewModel::closeWidgetPicker)
+        val pickerPage = viewModel.widgetPickerPage
+        val options = viewModel.widgetOptions
+        if (pickerPage != null && options != null) {
+            WidgetPickerDialog(
+                options = options,
+                onPick = { info ->
+                    viewModel.closeWidgetPicker()
+                    onBindWidget(info, pickerPage)
+                },
+                onDismiss = viewModel::closeWidgetPicker,
+            )
         }
 
         viewModel.renameApp?.let { app ->

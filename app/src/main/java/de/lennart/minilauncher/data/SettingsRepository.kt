@@ -2,7 +2,6 @@ package de.lennart.minilauncher.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -15,41 +14,43 @@ import org.json.JSONObject
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 data class LauncherSettings(
-    val favorites: List<String> = emptyList(),
+    /** Favorite app keys of the home page (index 0) and the second page (index 1). */
+    val favorites: List<List<String>> = List(PAGES) { emptyList() },
     val hidden: Set<String> = emptySet(),
     val renames: Map<String, String> = emptyMap(),
-    /** App widget shown on the home screen, if any. */
-    val widgetId: Int? = null,
-    /** Show the calendar agenda on its own page (swipe left) instead of on the home screen. */
-    val agendaOnOwnPage: Boolean = false,
+    /** App widget IDs above the favorites of each page; null for an empty slot. */
+    val widgetIds: List<Int?> = List(PAGES) { null },
 )
+
+/** Home page and second page. */
+const val PAGES = 2
 
 class SettingsRepository(context: Context) {
     private val dataStore = context.applicationContext.dataStore
 
     val settings: Flow<LauncherSettings> = dataStore.data.map { prefs ->
         LauncherSettings(
-            favorites = prefs.favorites(),
+            favorites = List(PAGES) { prefs.favorites(it) },
             hidden = prefs[HIDDEN] ?: emptySet(),
             renames = prefs.renames(),
-            widgetId = prefs[WIDGET_ID],
-            agendaOnOwnPage = prefs[AGENDA_OWN_PAGE] ?: false,
+            widgetIds = List(PAGES) { prefs[WIDGET_IDS[it]] },
         )
     }
 
-    suspend fun setFavorites(keys: List<String>) {
-        dataStore.edit { it[FAVORITES] = keys.distinct().joinToString(SEPARATOR) }
+    /** Replaces the favorites of [page] (0 = home, 1 = second page). */
+    suspend fun setFavorites(page: Int, keys: List<String>) {
+        dataStore.edit { it[FAVORITES[page]] = keys.distinct().joinToString(SEPARATOR) }
     }
 
-    suspend fun toggleFavorite(key: String) {
+    suspend fun toggleFavorite(page: Int, key: String) {
         dataStore.edit { prefs ->
-            val current = prefs.favorites()
+            val current = prefs.favorites(page)
             val updated = when {
                 key in current -> current - key
                 current.size < MAX_FAVORITES -> current + key
                 else -> current
             }
-            prefs[FAVORITES] = updated.joinToString(SEPARATOR)
+            prefs[FAVORITES[page]] = updated.joinToString(SEPARATOR)
         }
     }
 
@@ -57,7 +58,11 @@ class SettingsRepository(context: Context) {
         dataStore.edit { prefs ->
             val current = prefs[HIDDEN] ?: emptySet()
             prefs[HIDDEN] = if (hidden) current + key else current - key
-            if (hidden) prefs[FAVORITES] = (prefs.favorites() - key).joinToString(SEPARATOR)
+            if (hidden) {
+                for (page in 0 until PAGES) {
+                    prefs[FAVORITES[page]] = (prefs.favorites(page) - key).joinToString(SEPARATOR)
+                }
+            }
         }
     }
 
@@ -70,22 +75,18 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    /** Stores the home widget ([id] null removes it) and returns the previous one. */
-    suspend fun setWidgetId(id: Int?): Int? {
+    /** Stores the widget of [page] ([id] null removes it) and returns the previous one. */
+    suspend fun setWidgetId(page: Int, id: Int?): Int? {
         var previous: Int? = null
         dataStore.edit { prefs ->
-            previous = prefs[WIDGET_ID]
-            if (id == null) prefs.remove(WIDGET_ID) else prefs[WIDGET_ID] = id
+            previous = prefs[WIDGET_IDS[page]]
+            if (id == null) prefs.remove(WIDGET_IDS[page]) else prefs[WIDGET_IDS[page]] = id
         }
         return previous
     }
 
-    suspend fun setAgendaOnOwnPage(enabled: Boolean) {
-        dataStore.edit { it[AGENDA_OWN_PAGE] = enabled }
-    }
-
-    private fun Preferences.favorites(): List<String> =
-        this[FAVORITES]?.split(SEPARATOR)?.filter { it.isNotEmpty() } ?: emptyList()
+    private fun Preferences.favorites(page: Int): List<String> =
+        this[FAVORITES[page]]?.split(SEPARATOR)?.filter { it.isNotEmpty() } ?: emptyList()
 
     private fun Preferences.renames(): Map<String, String> {
         val json = this[RENAMES] ?: return emptyMap()
@@ -98,10 +99,10 @@ class SettingsRepository(context: Context) {
     companion object {
         const val MAX_FAVORITES = 8
         private const val SEPARATOR = "\n"
-        private val FAVORITES = stringPreferencesKey("favorites")
+        // The first entries keep the old key names, so existing favorites and widget stay.
+        private val FAVORITES = arrayOf(stringPreferencesKey("favorites"), stringPreferencesKey("favorites2"))
         private val HIDDEN = stringSetPreferencesKey("hidden")
         private val RENAMES = stringPreferencesKey("renames")
-        private val WIDGET_ID = intPreferencesKey("widget_id")
-        private val AGENDA_OWN_PAGE = booleanPreferencesKey("agenda_own_page")
+        private val WIDGET_IDS = arrayOf(intPreferencesKey("widget_id"), intPreferencesKey("widget_id_2"))
     }
 }

@@ -21,17 +21,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 class WidgetBinder(
     private val activity: ComponentActivity,
     private val host: () -> AppWidgetHost,
-    private val onBound: (Int) -> Unit,
+    private val onBound: (page: Int, widgetId: Int) -> Unit,
 ) {
     private val manager by lazy { AppWidgetManager.getInstance(activity) }
     private var pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private var pendingPage = 0
 
     private val bindRequest = activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == Activity.RESULT_OK) configureOrFinish() else cancel()
     }
 
-    fun bind(provider: AppWidgetProviderInfo) {
+    /** Adds [provider] above the favorites of [page]. */
+    fun bind(provider: AppWidgetProviderInfo, page: Int) {
         cancel()
+        pendingPage = page
         pendingId = host().allocateAppWidgetId()
         if (manager.bindAppWidgetIdIfAllowed(pendingId, provider.profile, provider.provider, null)) {
             configureOrFinish()
@@ -75,7 +78,7 @@ class WidgetBinder(
     private fun finish() {
         val id = pendingId
         pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
-        if (id != AppWidgetManager.INVALID_APPWIDGET_ID) onBound(id)
+        if (id != AppWidgetManager.INVALID_APPWIDGET_ID) onBound(pendingPage, id)
     }
 
     private fun cancel() {
@@ -86,15 +89,20 @@ class WidgetBinder(
     /** True while a widget is being added; its ID must not be cleaned up as orphaned. */
     val isBinding: Boolean get() = pendingId != AppWidgetManager.INVALID_APPWIDGET_ID
 
-    fun saveState(outState: Bundle) = outState.putInt(STATE_PENDING_ID, pendingId)
+    fun saveState(outState: Bundle) {
+        outState.putInt(STATE_PENDING_ID, pendingId)
+        outState.putInt(STATE_PENDING_PAGE, pendingPage)
+    }
 
     fun restoreState(state: Bundle?) {
         pendingId = state?.getInt(STATE_PENDING_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
             ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        pendingPage = state?.getInt(STATE_PENDING_PAGE, 0) ?: 0
     }
 
     private companion object {
         const val REQUEST_CONFIGURE = 0x57
         const val STATE_PENDING_ID = "pending_widget_id"
+        const val STATE_PENDING_PAGE = "pending_widget_page"
     }
 }

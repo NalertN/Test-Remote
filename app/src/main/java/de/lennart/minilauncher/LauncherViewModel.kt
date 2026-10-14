@@ -6,22 +6,17 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import de.lennart.minilauncher.data.AgendaDay
-import de.lennart.minilauncher.data.AgendaEvent
 import de.lennart.minilauncher.data.AppEntry
-import de.lennart.minilauncher.data.CalendarRepository
 import de.lennart.minilauncher.data.LauncherSettings
+import de.lennart.minilauncher.data.PAGES
 import de.lennart.minilauncher.data.SettingsRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -31,26 +26,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.Collator
 
-enum class Screen { Home, Drawer, Agenda, Settings }
+/** Home page, second page (swipe right), app list (swipe up) and settings. */
+enum class Screen { Home, Second, Drawer, Settings }
 
 /** An installable widget, labelled for the picker. */
 data class WidgetOption(val info: AppWidgetProviderInfo, val appLabel: String, val label: String)
 
 data class LauncherState(
-    val favorites: List<AppEntry> = emptyList(),
+    /** Favorites of the home page (index 0) and the second page (index 1). */
+    val favorites: List<List<AppEntry>> = List(PAGES) { emptyList() },
     /** Visible (non-hidden) apps, sorted alphabetically by display label. */
     val apps: List<AppEntry> = emptyList(),
     val hiddenApps: List<AppEntry> = emptyList(),
-    val favoriteKeys: Set<String> = emptySet(),
-    val widgetId: Int? = null,
-    val agendaOnOwnPage: Boolean = false,
+    val favoriteKeys: List<Set<String>> = List(PAGES) { emptySet() },
+    /** Widget above the favorites of each page, if any. */
+    val widgetIds: List<Int?> = List(PAGES) { null },
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
     private val launcherApp = application as LauncherApplication
     private val appRepository = launcherApp.appRepository
     private val settingsRepository = launcherApp.settingsRepository
-    private val calendarRepository = CalendarRepository(application)
     private val widgetHost = launcherApp.widgetHost
 
     var screen by mutableStateOf(Screen.Home)
@@ -61,16 +57,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var crashReport by mutableStateOf<String?>(null)
         private set
 
-    /** Upcoming events grouped by day; null hides the agenda (no calendar permission). */
-    var agenda by mutableStateOf<List<AgendaDay>?>(null)
+    /** Page whose widget picker is open, and the installed widgets to pick from (null while loading). */
+    var widgetPickerPage by mutableStateOf<Int?>(null)
         private set
-    private var agendaJob: Job? = null
-    private var stopWatchingCalendar: (() -> Unit)? = null
-
-    /** Installed widgets while the picker is open, null otherwise. */
     var widgetOptions by mutableStateOf<List<WidgetOption>?>(null)
         private set
-    var widgetMenuOpen by mutableStateOf(false)
+
+    /** Page whose widget menu (replace / remove) is open. */
+    var widgetMenuPage by mutableStateOf<Int?>(null)
 
     val state: StateFlow<LauncherState> =
         combine(appRepository.apps, settingsRepository.settings, ::buildState)
@@ -87,12 +81,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             .sortedWith { a, b -> collator.compare(a.label, b.label) }
         val byKey = labeled.associateBy { it.key }
         return LauncherState(
-            favorites = settings.favorites.mapNotNull { byKey[it] },
+            favorites = settings.favorites.map { keys -> keys.mapNotNull { byKey[it] } },
             apps = labeled.filter { it.key !in settings.hidden },
             hiddenApps = labeled.filter { it.key in settings.hidden },
-            favoriteKeys = settings.favorites.toSet(),
-            widgetId = settings.widgetId,
-            agendaOnOwnPage = settings.agendaOnOwnPage,
+            favoriteKeys = settings.favorites.map { it.toSet() },
+            widgetIds = settings.widgetIds,
         )
     }
 
@@ -113,12 +106,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         screen = Screen.Drawer
     }
 
-    fun openSettings() {
-        screen = Screen.Settings
+    fun openSecondPage() {
+        screen = Screen.Second
     }
 
-    fun openAgenda() {
-        screen = Screen.Agenda
+    fun openSettings() {
+        screen = Screen.Settings
     }
 
     fun goHome() {
@@ -126,8 +119,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         query = ""
         menuApp = null
         renameApp = null
+        widgetPickerPage = null
         widgetOptions = null
-        widgetMenuOpen = false
+        widgetMenuPage = null
     }
 
     fun refreshApps() = appRepository.refresh()
@@ -157,21 +151,22 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun toggleFavorite(app: AppEntry) {
-        if (app.key !in state.value.favoriteKeys && state.value.favorites.size >= SettingsRepository.MAX_FAVORITES) {
-            toast("Only ${SettingsRepository.MAX_FAVORITES} favorites allowed")
+    fun toggleFavorite(page: Int, app: AppEntry) {
+        val favorites = state.value.favorites[page]
+        if (app.key !in state.value.favoriteKeys[page] && favorites.size >= SettingsRepository.MAX_FAVORITES) {
+            toast("Only ${SettingsRepository.MAX_FAVORITES} favorites per page")
             return
         }
-        viewModelScope.launch { settingsRepository.toggleFavorite(app.key) }
+        viewModelScope.launch { settingsRepository.toggleFavorite(page, app.key) }
     }
 
-    fun moveFavorite(app: AppEntry, offset: Int) {
-        val keys = state.value.favorites.map { it.key }.toMutableList()
+    fun moveFavorite(page: Int, app: AppEntry, offset: Int) {
+        val keys = state.value.favorites[page].map { it.key }.toMutableList()
         val from = keys.indexOf(app.key)
         val to = from + offset
         if (from < 0 || to !in keys.indices) return
         keys.add(to, keys.removeAt(from))
-        viewModelScope.launch { settingsRepository.setFavorites(keys) }
+        viewModelScope.launch { settingsRepository.setFavorites(page, keys) }
     }
 
     fun setHidden(app: AppEntry, hidden: Boolean) {
@@ -182,51 +177,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settingsRepository.rename(app.key, name) }
     }
 
-    // Calendar
+    // Widgets
 
-    fun hasCalendarPermission() = calendarRepository.hasPermission()
-
-    /** Reloads the agenda; [debounce] coalesces bursts of change notifications during sync. */
-    fun refreshAgenda(debounce: Boolean = false) {
-        agendaJob?.cancel()
-        if (!calendarRepository.hasPermission()) {
-            agenda = null
-            return
-        }
-        agendaJob = viewModelScope.launch {
-            if (debounce) delay(500)
-            agenda = calendarRepository.load()
-        }
-    }
-
-    /** Keeps the agenda current while the launcher is visible. */
-    fun startWatchingCalendar() {
-        refreshAgenda()
-        if (stopWatchingCalendar == null && calendarRepository.hasPermission()) {
-            stopWatchingCalendar = calendarRepository.observe { refreshAgenda(debounce = true) }
-        }
-    }
-
-    fun stopWatchingCalendar() {
-        stopWatchingCalendar?.invoke()
-        stopWatchingCalendar = null
-    }
-
-    fun openEvent(event: AgendaEvent) = startActivity(calendarRepository.eventIntent(event))
-
-    fun openCalendarPermissionSettings() {
-        val context = getApplication<Application>()
-        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
-    }
-
-    fun setAgendaOnOwnPage(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setAgendaOnOwnPage(enabled) }
-    }
-
-    // Widget
-
-    fun openWidgetPicker() {
-        widgetMenuOpen = false
+    /** Opens the list of installed widgets to put above the favorites of [page]. */
+    fun openWidgetPicker(page: Int) {
+        widgetMenuPage = null
+        widgetPickerPage = page
         viewModelScope.launch {
             val context = getApplication<Application>()
             val pm = context.packageManager
@@ -247,39 +203,36 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun closeWidgetPicker() {
+        widgetPickerPage = null
         widgetOptions = null
     }
 
-    /** Shows [id] in the widget slot and releases the widget it replaces. */
-    fun setWidget(id: Int) {
+    /** Shows [id] above the favorites of [page] and releases the widget it replaces. */
+    fun setWidget(page: Int, id: Int) {
         viewModelScope.launch {
-            val previous = settingsRepository.setWidgetId(id)
+            val previous = settingsRepository.setWidgetId(page, id)
             if (previous != null && previous != id) widgetHost.deleteAppWidgetId(previous)
         }
     }
 
-    fun removeWidget() {
-        widgetMenuOpen = false
+    fun removeWidget(page: Int) {
+        widgetMenuPage = null
         viewModelScope.launch {
-            settingsRepository.setWidgetId(null)?.let(widgetHost::deleteAppWidgetId)
+            settingsRepository.setWidgetId(page, null)?.let(widgetHost::deleteAppWidgetId)
         }
     }
 
     /** Releases widget IDs left over from interrupted or crashed bind attempts. */
     fun releaseOrphanedWidgets() {
         viewModelScope.launch {
-            val keep = settingsRepository.settings.first().widgetId
-            widgetHost.appWidgetIds.filter { it != keep }.forEach(widgetHost::deleteAppWidgetId)
+            val keep = settingsRepository.settings.first().widgetIds.filterNotNull().toSet()
+            widgetHost.appWidgetIds.filter { it !in keep }.forEach(widgetHost::deleteAppWidgetId)
         }
     }
 
     fun dismissCrashReport() {
         CrashHandler.clear(getApplication())
         crashReport = null
-    }
-
-    override fun onCleared() {
-        stopWatchingCalendar()
     }
 
     private fun toast(message: String) {

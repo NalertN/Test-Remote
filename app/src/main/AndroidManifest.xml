@@ -3,8 +3,6 @@
 
     <!-- Needed for ACTION_DELETE (uninstall prompt). -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <!-- Agenda below the clock; requested at runtime, the agenda stays hidden without it. -->
-    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <queries>
         <intent>

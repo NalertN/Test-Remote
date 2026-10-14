@@ -27,17 +27,14 @@ import de.lennart.minilauncher.data.AppEntry
 
 @Composable
 fun SettingsScreen(
-    favorites: List<AppEntry>,
+    /** Favorites of the home page (index 0) and the second page (index 1). */
+    favorites: List<List<AppEntry>>,
     hiddenApps: List<AppEntry>,
-    hasWidget: Boolean,
-    onChooseWidget: () -> Unit,
-    onRemoveWidget: () -> Unit,
-    calendarAllowed: Boolean,
-    onAllowCalendar: () -> Unit,
-    agendaOnOwnPage: Boolean,
-    onAgendaOnOwnPageChange: (Boolean) -> Unit,
-    onMoveFavorite: (AppEntry, Int) -> Unit,
-    onRemoveFavorite: (AppEntry) -> Unit,
+    widgetIds: List<Int?>,
+    onChooseWidget: (page: Int) -> Unit,
+    onRemoveWidget: (page: Int) -> Unit,
+    onMoveFavorite: (page: Int, AppEntry, Int) -> Unit,
+    onRemoveFavorite: (page: Int, AppEntry) -> Unit,
     onUnhide: (AppEntry) -> Unit,
     onStartActivity: (Intent, Intent?) -> Unit,
     onClose: () -> Unit,
@@ -59,17 +56,31 @@ fun SettingsScreen(
             }
         }
 
-        item { SectionTitle("Favorites") }
-        if (favorites.isEmpty()) {
-            item { Hint("Long-press an app to add it.") }
-        }
-        itemsIndexed(favorites, key = { _, app -> "fav-${app.key}" }) { index, app ->
-            AppRow(app.label) {
-                ActionText("↑", enabled = index > 0) { onMoveFavorite(app, -1) }
-                ActionText("↓", enabled = index < favorites.lastIndex) { onMoveFavorite(app, 1) }
-                ActionText("Remove", dim = true) { onRemoveFavorite(app) }
+        for (page in favorites.indices) {
+            item { SectionTitle(if (page == 0) "Favorites 1 · home" else "Favorites 2 · swipe right") }
+            if (favorites[page].isEmpty()) {
+                item { Hint("Long-press an app in the app list to add it.") }
+            }
+            itemsIndexed(favorites[page], key = { _, app -> "fav$page-${app.key}" }) { index, app ->
+                AppRow(app.label) {
+                    ActionText("↑", enabled = index > 0) { onMoveFavorite(page, app, -1) }
+                    ActionText("↓", enabled = index < favorites[page].lastIndex) { onMoveFavorite(page, app, 1) }
+                    ActionText("Remove", dim = true) { onRemoveFavorite(page, app) }
+                }
             }
         }
+
+        item { SectionTitle("Widgets") }
+        for (page in widgetIds.indices) {
+            item {
+                val hasWidget = widgetIds[page] != null
+                AppRow(if (page == 0) "Home widget" else "Second page widget") {
+                    ActionText(if (hasWidget) "Replace" else "Add") { onChooseWidget(page) }
+                    if (hasWidget) ActionText("Remove", dim = true) { onRemoveWidget(page) }
+                }
+            }
+        }
+        item { Hint("A widget sits above the favorites of its page. Long-press it to replace or remove it.") }
 
         item { SectionTitle("Hidden apps") }
         if (hiddenApps.isEmpty()) {
@@ -79,28 +90,6 @@ fun SettingsScreen(
             AppRow(app.label) {
                 ActionText("Unhide", dim = true) { onUnhide(app) }
             }
-        }
-
-        item { SectionTitle("Widget") }
-        item {
-            AppRow(if (hasWidget) "Home widget" else "No widget") {
-                ActionText(if (hasWidget) "Replace" else "Add", onClick = onChooseWidget)
-                if (hasWidget) ActionText("Remove", dim = true, onClick = onRemoveWidget)
-            }
-        }
-        item { Hint("Shown below the agenda. Long-press it to replace or remove.") }
-
-        item { SectionTitle("Calendar") }
-        if (calendarAllowed) {
-            item {
-                AppRow(if (agendaOnOwnPage) "Agenda on its own page" else "Agenda on the home screen") {
-                    ActionText("Change", dim = true) { onAgendaOnOwnPageChange(!agendaOnOwnPage) }
-                }
-            }
-            if (agendaOnOwnPage) item { Hint("Swipe left on the home screen to see it.") }
-        } else {
-            item { SettingLink("Allow calendar access", onAllowCalendar) }
-            item { Hint("Under Permissions → Calendar. The agenda stays hidden until then.") }
         }
 
         item { SectionTitle("Launcher") }

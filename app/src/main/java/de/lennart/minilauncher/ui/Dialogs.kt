@@ -34,10 +34,11 @@ import de.lennart.minilauncher.data.AppEntry
 @Composable
 fun AppActionsDialog(
     app: AppEntry,
-    isFavorite: Boolean,
+    /** Whether the app is a favorite on the home page (index 0) and the second page (index 1). */
+    isFavorite: List<Boolean>,
     isHidden: Boolean,
     onDismiss: () -> Unit,
-    onToggleFavorite: () -> Unit,
+    onToggleFavorite: (page: Int) -> Unit,
     onRename: () -> Unit,
     onToggleHidden: (Boolean) -> Unit,
     onAppInfo: () -> Unit,
@@ -50,7 +51,8 @@ fun AppActionsDialog(
     ActionsDialog(
         title = app.label,
         actions = listOf(
-            action(if (isFavorite) "Remove from favorites" else "Add to favorites", block = onToggleFavorite),
+            action(if (isFavorite[0]) "Remove from favorites 1" else "Add to favorites 1") { onToggleFavorite(0) },
+            action(if (isFavorite[1]) "Remove from favorites 2" else "Add to favorites 2") { onToggleFavorite(1) },
             action("Rename", block = onRename),
             action(if (isHidden) "Unhide" else "Hide") { onToggleHidden(!isHidden) },
             action("App info", block = onAppInfo),
