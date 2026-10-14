@@ -93,7 +93,7 @@ fun SettingsScreen(
         item { SectionTitle("Calendar") }
         if (calendarAllowed) {
             item {
-                AppRow(if (agendaOnOwnPage) "Agenda on its own page" else "Agenda below the clock") {
+                AppRow(if (agendaOnOwnPage) "Agenda on its own page" else "Agenda on the home screen") {
                     ActionText("Change", dim = true) { onAgendaOnOwnPageChange(!agendaOnOwnPage) }
                 }
             }

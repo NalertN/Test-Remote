@@ -20,7 +20,7 @@ data class LauncherSettings(
     val renames: Map<String, String> = emptyMap(),
     /** App widget shown on the home screen, if any. */
     val widgetId: Int? = null,
-    /** Show the calendar agenda on its own page (swipe left) instead of below the clock. */
+    /** Show the calendar agenda on its own page (swipe left) instead of on the home screen. */
     val agendaOnOwnPage: Boolean = false,
 )
 

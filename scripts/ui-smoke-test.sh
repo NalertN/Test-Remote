@@ -108,10 +108,6 @@ echo "Calendar events added: $events_added"
 adb shell cmd role add-role-holder android.app.role.HOME "$PKG" || true
 adb shell cmd package set-home-activity "$PKG/.MainActivity" || true
 adb logcat -c
-# Fixed, discharging battery so the ring shows a stable level.
-adb shell dumpsys battery unplug
-adb shell dumpsys battery set status 3
-adb shell dumpsys battery set level 78
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard || true
 home
@@ -147,7 +143,7 @@ echo "Favorites added: $added"
 home
 shot 05-home-favorites
 
-# Long-press on empty space above the clock opens settings (below the favorites may be
+# Long-press on empty space above the date opens settings (below the favorites may be
 # scrolled content once the agenda and widget are shown).
 open_settings() { adb shell input swipe $((W / 2)) $((H * 8 / 100)) $((W / 2)) $((H * 8 / 100)) 1200; sleep 1.5; }
 open_settings
@@ -175,11 +171,6 @@ shot 08-enter-launches-top-result
 adb shell dumpsys activity activities | grep -m1 -E 'topResumedActivity|mResumedActivity' | tee "$OUT/top-activity.txt" || true
 home
 shot 09-home-again
-
-# Low battery turns the ring's arc red.
-adb shell dumpsys battery set level 12
-shot 10-home-low-battery
-adb shell dumpsys battery reset
 
 # Widget slot: add a widget from settings, then long-press it to get its menu.
 home
