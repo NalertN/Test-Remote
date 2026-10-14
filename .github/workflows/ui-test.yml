@@ -38,7 +38,8 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          profile: pixel_10
+          # Same display as the Pixel 10 (1080x2424, 422 ppi); the runner has no pixel_10 profile yet.
+          profile: pixel_9
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash scripts/ui-smoke-test.sh
 
