@@ -49,12 +49,15 @@ find_text() { find_attr text "$1"; }
 # Succeeds if some node's text contains $1.
 has_text() { dump_ui | grep -F "text=\"" | grep -qF "$1"; }
 
-# Waits until the launcher has drawn its UI; the first start can take a while.
+# Waits until the launcher has drawn its UI and has input focus; the first start can take a
+# while.
 wait_for_launcher() {
   local i
   for i in $(seq 1 30); do
-    if adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 &&
+    if adb shell dumpsys window | grep -E "mCurrentFocus=.*$PKG" >/dev/null &&
+      adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 &&
       adb exec-out cat /sdcard/ui.xml | grep "package=\"$PKG\"" >/dev/null; then
+      sleep 1
       return 0
     fi
     sleep 1
@@ -77,6 +80,14 @@ long_press_text() {
   adb shell input swipe "$1" "$2" "$1" "$2" 1200
   sleep 1.5
 }
+
+# Keep logs and the last UI hierarchy for debugging, whether the test passes or not.
+save_logs() {
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
+  adb logcat -d -b crash > "$OUT/crash-buffer.txt" 2>/dev/null || true
+  adb exec-out cat /sdcard/ui.xml > "$OUT/last-ui.xml" 2>/dev/null || true
+}
+trap save_logs EXIT
 
 adb install -r "$APK"
 # Calendar access and widget binding normally need a dialog each; pre-grant both.
@@ -219,8 +230,7 @@ if [ "$events_added" -eq 1 ]; then
   shot 16-home-without-agenda
 fi
 
-adb logcat -d > "$OUT/logcat.txt"
-adb logcat -d -b crash > "$OUT/crash-buffer.txt" || true
+save_logs
 if grep -q "$PKG" "$OUT/crash-buffer.txt" ||
   adb shell run-as "$PKG" ls files/last_crash.txt >/dev/null 2>&1; then
   echo "Launcher crashed:"
