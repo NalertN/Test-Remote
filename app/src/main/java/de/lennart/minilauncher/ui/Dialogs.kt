@@ -1,9 +1,9 @@
 package de.lennart.minilauncher.ui
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,17 +46,22 @@ fun AppActionsDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            color = Color.Black,
-            modifier = Modifier.border(1.dp, Color.DarkGray),
+            color = SurfaceColor,
+            shape = RoundedCornerShape(28.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.padding(horizontal = 28.dp, vertical = 20.dp)) {
+            Column(
+                Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
                     app.label,
                     color = DimText,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
+                    letterSpacing = 0.3.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 8.dp),
+                    modifier = Modifier.padding(bottom = 12.dp),
                 )
                 fun action(label: String, block: () -> Unit) = label to {
                     onDismiss()
@@ -69,12 +76,13 @@ fun AppActionsDialog(
                 ).forEach { (label, onClick) ->
                     Text(
                         label,
-                        color = Color.White,
-                        fontSize = 20.sp,
+                        color = if (label == "Uninstall") DangerColor else Color.White,
+                        fontSize = 19.sp,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .plainClickable(onClick = onClick)
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 13.dp),
                     )
                 }
             }
@@ -90,7 +98,7 @@ fun RenameDialog(app: AppEntry, onDismiss: () -> Unit, onRename: (String) -> Uni
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF111111),
+        containerColor = SurfaceColor,
         title = { Text("Rename") },
         text = {
             Column {

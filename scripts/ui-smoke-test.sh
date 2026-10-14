@@ -51,6 +51,10 @@ adb install -r "$APK"
 adb shell cmd role add-role-holder android.app.role.HOME "$PKG" || true
 adb shell cmd package set-home-activity "$PKG/.MainActivity" || true
 adb logcat -c
+# Fixed, discharging battery so the ring shows a stable level.
+adb shell dumpsys battery unplug
+adb shell dumpsys battery set status 3
+adb shell dumpsys battery set level 78
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard || true
 home
@@ -83,7 +87,7 @@ home
 shot 05-home-favorites
 
 # Long-press empty space below the favorites opens settings.
-adb shell input swipe $((W / 2)) $((H * 85 / 100)) $((W / 2)) $((H * 85 / 100)) 1200
+adb shell input swipe $((W / 2)) $((H * 92 / 100)) $((W / 2)) $((H * 92 / 100)) 1200
 shot 06-settings
 
 # Back returns home; Back on home does nothing.
@@ -100,6 +104,11 @@ shot 08-enter-launches-top-result
 adb shell dumpsys activity activities | grep -m1 -E 'topResumedActivity|mResumedActivity' | tee "$OUT/top-activity.txt" || true
 home
 shot 09-home-again
+
+# Low battery turns the ring's arc red.
+adb shell dumpsys battery set level 12
+shot 10-home-low-battery
+adb shell dumpsys battery reset
 
 adb logcat -d > "$OUT/logcat.txt"
 adb logcat -d -b crash > "$OUT/crash-buffer.txt" || true

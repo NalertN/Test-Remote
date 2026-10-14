@@ -1,6 +1,9 @@
 package de.lennart.minilauncher.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -9,27 +12,30 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,11 +89,16 @@ fun AppDrawer(
             .imePadding()
             .padding(horizontal = 32.dp),
     ) {
+        val textStyle = LocalTextStyle.current.copy(
+            color = Color.White,
+            fontSize = 18.sp,
+            textAlign = TextAlign.Center,
+        )
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = TextStyle(color = Color.White, fontSize = 24.sp),
+            textStyle = textStyle,
             cursorBrush = SolidColor(Color.White),
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
@@ -96,16 +107,25 @@ fun AppDrawer(
             ),
             keyboardActions = KeyboardActions(onGo = { apps.firstOrNull()?.let(onLaunch) }),
             decorationBox = { inner ->
-                if (query.isEmpty()) Text("Search", color = DimText, fontSize = 24.sp)
-                inner()
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceColor, RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (query.isEmpty()) Text("Search", style = textStyle.copy(color = DimText))
+                    inner()
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 16.dp)
+                .padding(top = 24.dp, bottom = 8.dp)
                 .focusRequester(focusRequester),
         )
         LazyColumn(
             state = listState,
+            contentPadding = PaddingValues(vertical = 16.dp),
             modifier = Modifier.fillMaxSize().nestedScroll(closeOnOverscroll),
         ) {
             items(apps, key = { it.key }) { app ->
@@ -113,12 +133,14 @@ fun AppDrawer(
                     text = app.label,
                     color = Color.White,
                     fontSize = 22.sp,
+                    letterSpacing = 0.2.sp,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .fillMaxWidth()
                         .plainClickable(onLongClick = { onAppLongPress(app) }) { onLaunch(app) }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 13.dp),
                 )
             }
         }

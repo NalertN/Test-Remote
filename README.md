@@ -4,7 +4,7 @@ Minimalist, text-only Android home screen launcher (inspired by "Minimalist Phon
 
 ## Features
 
-- Home: large clock (tap → alarms) and date (tap → calendar), up to 8 favorite apps
+- Home: centered clock inside a ring that shows the battery level (tap → alarms), date (tap → calendar), up to 8 favorite apps
 - Swipe up: alphabetical app list with search; keyboard opens automatically, Enter launches the top result
 - Long-press an app: favorite, rename, hide, app info, uninstall
 - Long-press empty home area: settings (reorder favorites, hidden apps, version)

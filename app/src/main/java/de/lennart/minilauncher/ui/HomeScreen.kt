@@ -4,25 +4,44 @@ import android.content.Intent
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.text.format.DateFormat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import de.lennart.minilauncher.data.AppEntry
 import kotlinx.coroutines.delay
-import androidx.compose.ui.platform.LocalLocale
+import java.text.NumberFormat
 
 @Composable
 fun HomeScreen(
@@ -61,9 +80,12 @@ fun HomeScreen(
     ) {
         Column(
             Modifier
+                .fillMaxSize()
                 .safeDrawingPadding()
-                .padding(horizontal = 32.dp, vertical = 48.dp),
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Spacer(Modifier.height(56.dp))
             Clock(
                 onClockClick = {
                     onStartActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS), null)
@@ -79,18 +101,29 @@ fun HomeScreen(
                     )
                 },
             )
-            Spacer(Modifier.height(56.dp))
-            favorites.forEach { app ->
-                Text(
-                    text = app.label,
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .padding(vertical = 10.dp)
-                        .plainClickable(onLongClick = { onAppLongPress(app) }) { onLaunch(app) },
-                )
+            // Favorites sit centered in the space below the clock, so the clock never moves.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                favorites.forEach { app ->
+                    Text(
+                        text = app.label,
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        letterSpacing = 0.2.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .plainClickable(onLongClick = { onAppLongPress(app) }) { onLaunch(app) }
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
             }
         }
     }
@@ -99,6 +132,7 @@ fun HomeScreen(
 @Composable
 private fun Clock(onClockClick: () -> Unit, onDateClick: (Long) -> Unit) {
     val context = LocalContext.current
+    val locale = LocalLocale.current.platformLocale
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     // Ticks once per minute while visible; resyncs immediately on resume (delay() pauses in deep sleep).
     val now by produceState(System.currentTimeMillis(), lifecycle) {
@@ -109,21 +143,88 @@ private fun Clock(onClockClick: () -> Unit, onDateClick: (Long) -> Unit) {
             }
         }
     }
-    val time = DateFormat.getTimeFormat(context).format(now)
-    val datePattern = DateFormat.getBestDateTimePattern(LocalLocale.current.platformLocale, "EEEEdMMMM")
-    val date = DateFormat.format(datePattern, now).toString()
+    val is24Hour = DateFormat.is24HourFormat(context)
+    val time = DateFormat.format(if (is24Hour) "HH:mm" else "h:mm", now).toString()
+    val amPm = if (is24Hour) null else DateFormat.format("a", now).toString()
+    val date = DateFormat.format(DateFormat.getBestDateTimePattern(locale, "EEEEdMMMM"), now).toString()
 
-    Text(
-        text = time,
-        color = Color.White,
-        fontSize = 72.sp,
-        fontWeight = FontWeight.Light,
-        modifier = Modifier.plainClickable(onClick = onClockClick),
-    )
+    val battery = rememberBatteryState()
+    val percent = remember(battery.level, locale) {
+        NumberFormat.getPercentInstance(locale).format(battery.level.toDouble())
+    }
+
+    Box(
+        Modifier
+            .size(236.dp)
+            .plainClickable(onClick = onClockClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        BatteryRing(battery, Modifier.fillMaxSize())
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = time,
+                color = Color.White,
+                fontSize = 60.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = (-1).sp,
+            )
+            Text(
+                text = listOfNotNull(amPm, percent).joinToString("  ·  "),
+                color = DimText,
+                fontSize = 14.sp,
+                letterSpacing = 0.5.sp,
+            )
+        }
+    }
+    Spacer(Modifier.height(20.dp))
     Text(
         text = date,
         color = DimText,
-        fontSize = 20.sp,
-        modifier = Modifier.plainClickable { onDateClick(now) },
+        fontSize = 17.sp,
+        letterSpacing = 0.3.sp,
+        modifier = Modifier
+            .plainClickable { onDateClick(now) }
+            .padding(horizontal = 16.dp, vertical = 6.dp),
     )
+}
+
+/** Thin ring whose bright arc shows the battery level; it gently pulses while charging. */
+@Composable
+private fun BatteryRing(battery: BatteryState, modifier: Modifier = Modifier) {
+    val sweep by animateFloatAsState(battery.level * 360f, tween(900), label = "battery")
+    val pulse: State<Float>? = if (battery.charging) {
+        rememberInfiniteTransition(label = "charging").animateFloat(
+            initialValue = 1f,
+            targetValue = 0.45f,
+            animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
+            label = "pulse",
+        )
+    } else {
+        null
+    }
+    val arcColor = if (battery.level <= 0.15f && !battery.charging) DangerColor else Color.White
+
+    Canvas(modifier) {
+        val stroke = 4.dp.toPx()
+        val inset = stroke / 2
+        val arcSize = Size(size.width - stroke, size.height - stroke)
+        drawArc(
+            color = Color.White.copy(alpha = 0.12f),
+            startAngle = 0f,
+            sweepAngle = 360f,
+            useCenter = false,
+            topLeft = Offset(inset, inset),
+            size = arcSize,
+            style = Stroke(stroke),
+        )
+        drawArc(
+            color = arcColor.copy(alpha = pulse?.value ?: 1f),
+            startAngle = -90f,
+            sweepAngle = sweep,
+            useCenter = false,
+            topLeft = Offset(inset, inset),
+            size = arcSize,
+            style = Stroke(stroke, cap = StrokeCap.Round),
+        )
+    }
 }

@@ -32,14 +32,22 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The runner's preinstalled command-line tools predate the Pixel 9/10 device profiles.
+      - name: Update Android command-line tools
+        run: |
+          curl -sSLo "$RUNNER_TEMP/clt.zip" https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+          unzip -q "$RUNNER_TEMP/clt.zip" -d "$RUNNER_TEMP/clt"
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+          mv "$RUNNER_TEMP/clt/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list device -c | grep -x pixel_10
+
       - name: Run smoke test on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          # Same display as the Pixel 10 (1080x2424, 422 ppi); the runner has no pixel_10 profile yet.
-          profile: pixel_9
+          profile: pixel_10
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash scripts/ui-smoke-test.sh
 
