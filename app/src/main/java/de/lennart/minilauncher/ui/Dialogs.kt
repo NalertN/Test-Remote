@@ -28,7 +28,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import de.lennart.minilauncher.data.AppEntry
 
@@ -57,8 +56,7 @@ fun AppActionsDialog(
                 Text(
                     app.label,
                     color = DimText,
-                    fontSize = 15.sp,
-                    letterSpacing = 0.3.sp,
+                    fontSize = TypeScale.Caption,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(bottom = 12.dp),
@@ -77,7 +75,7 @@ fun AppActionsDialog(
                     Text(
                         label,
                         color = if (label == "Uninstall") DangerColor else Color.White,
-                        fontSize = 19.sp,
+                        fontSize = TypeScale.Body,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -113,7 +111,7 @@ fun RenameDialog(app: AppEntry, onDismiss: () -> Unit, onRename: (String) -> Uni
                 Text(
                     "Original: ${app.originalLabel}",
                     color = DimText,
-                    fontSize = 14.sp,
+                    fontSize = TypeScale.Small,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }

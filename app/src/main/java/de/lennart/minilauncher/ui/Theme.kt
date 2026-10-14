@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 
 val DimText = Color(0xFF8A8A8A)
 val SurfaceColor = Color(0xFF141414)
@@ -30,6 +31,15 @@ private val LauncherColors = darkColorScheme(
     surfaceContainerHigh = SurfaceColor,
     outline = DimText,
 )
+
+/** One modular type scale (ratio ~1.27) used across all screens. */
+object TypeScale {
+    val Time = 64.sp
+    val Title = 26.sp
+    val Body = 20.sp
+    val Caption = 15.sp
+    val Small = 13.sp
+}
 
 /**
  * The device's own UI font: Google Sans on Pixels (as used by the system UI), otherwise the

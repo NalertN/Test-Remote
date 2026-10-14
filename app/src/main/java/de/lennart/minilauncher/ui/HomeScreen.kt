@@ -13,12 +13,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -40,7 +38,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,7 +86,7 @@ fun HomeScreen(
                 .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(56.dp))
+            Spacer(Modifier.height(64.dp))
             Clock(
                 onClockClick = {
                     onStartActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS), null)
@@ -101,29 +102,20 @@ fun HomeScreen(
                     )
                 },
             )
-            // Favorites sit centered in the space below the clock, so the clock never moves.
-            Column(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                favorites.forEach { app ->
-                    Text(
-                        text = app.label,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        letterSpacing = 0.2.sp,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .plainClickable(onLongClick = { onAppLongPress(app) }) { onLaunch(app) }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                    )
-                }
+            // Favorites hang at a fixed distance below the date, so clock and apps read as one group.
+            Spacer(Modifier.height(44.dp))
+            favorites.forEach { app ->
+                Text(
+                    text = app.label,
+                    color = Color.White,
+                    fontSize = TypeScale.Title,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .plainClickable(onLongClick = { onAppLongPress(app) }) { onLaunch(app) }
+                        .padding(horizontal = 24.dp, vertical = 11.dp),
+                )
             }
         }
     }
@@ -155,24 +147,28 @@ private fun Clock(onClockClick: () -> Unit, onDateClick: (Long) -> Unit) {
 
     Box(
         Modifier
-            .size(236.dp)
+            .size(240.dp)
             .plainClickable(onClick = onClockClick),
         contentAlignment = Alignment.Center,
     ) {
         BatteryRing(battery, Modifier.fillMaxSize())
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = time,
+                text = buildAnnotatedString {
+                    append(time)
+                    if (amPm != null) {
+                        withStyle(SpanStyle(fontSize = TypeScale.Caption, color = DimText)) { append(" $amPm") }
+                    }
+                },
                 color = Color.White,
-                fontSize = 60.sp,
+                fontSize = TypeScale.Time,
                 fontWeight = FontWeight.Light,
-                letterSpacing = (-1).sp,
+                letterSpacing = (-1.5).sp,
             )
             Text(
-                text = listOfNotNull(amPm, percent).joinToString("  ·  "),
+                text = percent,
                 color = DimText,
-                fontSize = 14.sp,
-                letterSpacing = 0.5.sp,
+                fontSize = TypeScale.Caption,
             )
         }
     }
@@ -180,11 +176,10 @@ private fun Clock(onClockClick: () -> Unit, onDateClick: (Long) -> Unit) {
     Text(
         text = date,
         color = DimText,
-        fontSize = 17.sp,
-        letterSpacing = 0.3.sp,
+        fontSize = TypeScale.Caption,
         modifier = Modifier
             .plainClickable { onDateClick(now) }
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
 

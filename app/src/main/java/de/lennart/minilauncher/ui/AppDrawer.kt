@@ -38,7 +38,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import de.lennart.minilauncher.data.AppEntry
 
 @Composable
@@ -91,7 +90,7 @@ fun AppDrawer(
     ) {
         val textStyle = LocalTextStyle.current.copy(
             color = Color.White,
-            fontSize = 18.sp,
+            fontSize = TypeScale.Body,
             textAlign = TextAlign.Center,
         )
         BasicTextField(
@@ -132,15 +131,14 @@ fun AppDrawer(
                 Text(
                     text = app.label,
                     color = Color.White,
-                    fontSize = 22.sp,
-                    letterSpacing = 0.2.sp,
+                    fontSize = TypeScale.Body,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .fillMaxWidth()
                         .plainClickable(onLongClick = { onAppLongPress(app) }) { onLaunch(app) }
-                        .padding(vertical = 13.dp),
+                        .padding(vertical = 14.dp),
                 )
             }
         }
